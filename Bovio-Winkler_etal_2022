@@ -1,0 +1,43 @@
+#FASTQC (global quality check)
+
+#Trimmomatic (remove adapters and bases below a quality score of 25)
+java -jar Trimmomatic-0.36 PE ../R1_1.fastq ../R1_2.fastq trimm_R1_1.fastq trimm_R1_2.fastq HEADCROP:5 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:24 MINLEN:75
+java -jar Trimmomatic-0.36 PE ../R2_1.fastq ../R2_2.fastq trimm_R2_1.fastq trimm_R2_2.fastq HEADCROP:5 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:24 MINLEN:75
+java -jar Trimmomatic-0.36 PE ../R3_1.fastq ../R3_2.fastq trimm_R3_1.fastq trimm_R3_2.fastq HEADCROP:5 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:24 MINLEN:75
+
+
+#Pool metagenomes from the same reactor
+cat trimm_R1_1.fastq  trimm_R2_1.fastq  trimm_R3_1.fastq > trimm_R123_1.fastq
+cat trimm_R1_2.fastq  trimm_R2_2.fastq  trimm_R3_2.fastq > trimm_R123_2.fastq
+
+
+#Megahit (Metagenome assembly)
+megahit -1 trimm_R123_1.fastq -2 trimm_R123_2.fastq -o megahit_R123 --k-min 43 --k-max 75 --k-step 4 -m 0.8 -t 10
+
+#Bowtie2
+bowtie2 -x final.contigs_result_index -1 trimm_R1_1.fastq  -2 trimm_R1_2.fastq -S MAPEO_final.contig_result_trimm_R1_2.fastq.sam -p 12
+bowtie2 -x final.contigs_result_index -1 trimm_R2_1.fastq  -2 trimm_R2_2.fastq -S MAPEO_final.contig_result_trimm_R2_2.fastq.sam -p 12
+bowtie2 -x final.contigs_result_index -1 trimm_R3_1.fastq  -2 trimm_R3_2.fastq -S MAPEO_final.contig_result_trimm_R2_2.fastq.sam -p 12
+
+
+#MetaBAT
+metabat2 -i ../final.contigs_result.fa -a jgi_summarize_bam_contig_depths.txt -o bines_MEGABAT/bin -m 1500 -t 10 
+
+#CheckM
+checkm lineage_wf -f resA1/CheckM.txt --tab_table -t 10 -x fa . resA1/SCG
+
+#GTDB
+gtdbtk classify_wf --cpus 17  -x fa --genome_dir bines_MEGABAT/bin --out_dir GTDB
+
+
+#Reassembly
+spades.py -1 ../contig.names.bin66_b.txt.1.fastq -2 ../contig.names.bin66_b.txt.2.fastq -o reassembly_results -k 41,53,65,77 --only-assembler --careful -t 10
+
+
+#Prokka
+for i in `cat MAGs-HQ_dRep.txt`; do prokka $i --outdir prokka/$i --cpus 20 --metagenome ; done
+
+
+
+
+
